@@ -24,7 +24,7 @@ clean:
 
 # an example of a more complex build line for the Intel icc compiler
 stream.icc: stream.c
-	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -mcmodel=medium -DSTREAM_ARRAY_SIZE=${STREAM_ARRAY_SIZE} -DNTIMES=${NTIMES} stream.c -o stream.omp.icc
+	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium -DSTREAM_ARRAY_SIZE=${STREAM_ARRAY_SIZE} -DNTIMES=${NTIMES} stream.c -o stream.omp.icc
 
 stream.ncc: 
 	ncc -O3 -fopenmp -DSTREAM_ARRAY_SIZE=${STREAM_ARRAY_SIZE} -DNTIMES=${NTIMES} stream.c -o stream.omp.ncc
