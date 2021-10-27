@@ -124,6 +124,10 @@
 #   define OFFSET 0
 #endif
 
+#ifndef READ_ONLY
+#   define READ_ONLY 0
+#endif
+
 /*
  *  3) Compile the code with optimization.  Many compilers generate
  *       unreasonably bad code before the optimizer tightens things up.  
@@ -304,15 +308,23 @@ main()
     /*  --- MAIN LOOP --- repeat test cases NTIMES times --- */
 
     scalar = 3.0;
+    double result = 0.0;
     for (k=0; k<NTIMES; k++)
   {
   times[0][k] = mysecond();
 #ifdef TUNED
         tuned_STREAM_Copy();
 #else
+#if READ_ONLY
+  result = 0.0;
+#pragma omp parallel for reduction(+:result)
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += a[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       c[j] = a[j];
+#endif
 #endif
   times[0][k] = mysecond() - times[0][k];
   
@@ -320,9 +332,16 @@ main()
 #ifdef TUNED
         tuned_STREAM_Scale(scalar);
 #else
+#if READ_ONLY
+  result = 0.0;
+#pragma omp parallel for reduction(+:result)
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += scalar*c[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       b[j] = scalar*c[j];
+#endif
 #endif
   times[1][k] = mysecond() - times[1][k];
   
@@ -330,9 +349,16 @@ main()
 #ifdef TUNED
         tuned_STREAM_Add();
 #else
+#if READ_ONLY
+  result = 0.0;
+#pragma omp parallel for reduction(+:result)
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += a[j]+b[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       c[j] = a[j]+b[j];
+#endif
 #endif
   times[2][k] = mysecond() - times[2][k];
   
@@ -340,9 +366,16 @@ main()
 #ifdef TUNED
         tuned_STREAM_Triad(scalar);
 #else
+#if READ_ONLY
+  result = 0.0;
+#pragma omp parallel for reduction(+:result)
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += b[j]+scalar*c[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       a[j] = b[j]+scalar*c[j];
+#endif
 #endif
   times[3][k] = mysecond() - times[3][k];
   }
