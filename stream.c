@@ -128,6 +128,10 @@
 #   define READ_ONLY 0
 #endif
 
+#ifndef READ_ONLY_REDUCTION
+#   define READ_ONLY_REDUCTION 1
+#endif
+
 /*
  *  3) Compile the code with optimization.  Many compilers generate
  *       unreasonably bad code before the optimizer tightens things up.  
@@ -190,12 +194,21 @@ static double avgtime[4] = {0}, maxtime[4] = {0},
 static char *label[4] = {"Copy:      ", "Scale:     ",
     "Add:       ", "Triad:     "};
 
+#if READ_ONLY
+static double bytes[4] = {
+    1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
+    1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
+    2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
+    2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE
+    };
+#else
 static double bytes[4] = {
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE
     };
+#endif
 
 extern double mysecond();
 extern void checkSTREAMresults();
@@ -289,7 +302,7 @@ main()
     t = mysecond();
 #pragma omp parallel for
     for (j = 0; j < STREAM_ARRAY_SIZE; j++)
-    a[j] = 2.0E0 * a[j];
+        a[j] = 2.0E0 * a[j];
     t = 1.0E6 * (mysecond() - t);
 
     printf("Each test below will take on the order"
@@ -317,7 +330,11 @@ main()
 #else
 #if READ_ONLY
   result = 0.0;
+#if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for firstprivate(result)
+#endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += a[j];
 #else
@@ -334,7 +351,11 @@ main()
 #else
 #if READ_ONLY
   result = 0.0;
+#if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for firstprivate(result)
+#endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += scalar*c[j];
 #else
@@ -351,7 +372,11 @@ main()
 #else
 #if READ_ONLY
   result = 0.0;
+#if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for firstprivate(result)
+#endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += a[j]+b[j];
 #else
@@ -368,7 +393,11 @@ main()
 #else
 #if READ_ONLY
   result = 0.0;
+#if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for firstprivate(result)
+#endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += b[j]+scalar*c[j];
 #else
