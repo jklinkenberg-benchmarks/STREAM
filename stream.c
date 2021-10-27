@@ -333,7 +333,7 @@ main()
 #if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
 #else
-#pragma omp parallel for firstprivate(result)
+#pragma omp parallel for lastprivate(result)
 #endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += a[j];
@@ -354,7 +354,7 @@ main()
 #if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
 #else
-#pragma omp parallel for firstprivate(result)
+#pragma omp parallel for lastprivate(result)
 #endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += scalar*c[j];
@@ -375,7 +375,7 @@ main()
 #if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
 #else
-#pragma omp parallel for firstprivate(result)
+#pragma omp parallel for lastprivate(result)
 #endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += a[j]+b[j];
@@ -396,7 +396,7 @@ main()
 #if READ_ONLY_REDUCTION
 #pragma omp parallel for reduction(+:result)
 #else
-#pragma omp parallel for firstprivate(result)
+#pragma omp parallel for lastprivate(result)
 #endif
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       result += b[j]+scalar*c[j];
