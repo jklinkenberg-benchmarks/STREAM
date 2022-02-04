@@ -41,11 +41,14 @@
 /*  5. Absolutely no warranty is expressed or implied.                   */
 /*-----------------------------------------------------------------------*/
 # include <stdio.h>
+# include <stdlib.h>
 # include <unistd.h>
 # include <math.h>
 # include <float.h>
 # include <limits.h>
 # include <sys/time.h>
+#include <linux/mman.h>
+#include <malloc.h>
 
 /*-----------------------------------------------------------------------
  * INSTRUCTIONS:
@@ -90,8 +93,13 @@
  *          will override the default size of 10M with a new size of 100M elements
  *          per array.
  */
+
 #ifndef STREAM_ARRAY_SIZE
 #   define STREAM_ARRAY_SIZE  40000000
+#endif
+
+#ifndef STREAM_USE_HEAP
+#   define STREAM_USE_HEAP 1
 #endif
 
 /*  2) STREAM runs each kernel "NTIMES" times and reports the *best* result
@@ -124,12 +132,22 @@
 #   define OFFSET 0
 #endif
 
-#ifndef READ_ONLY
-#   define READ_ONLY 0
+#ifndef TASKS_INVERTED
+#   define TASKS_INVERTED 0
 #endif
 
-#ifndef READ_ONLY_REDUCTION
-#   define READ_ONLY_REDUCTION 1
+#ifndef TASKS_SINGLE_CREATOR
+#   define TASKS_SINGLE_CREATOR 1
+#endif
+
+#ifndef TASKS_MULTIPLICATOR
+#   define TASKS_MULTIPLICATOR 32
+#endif
+
+// invert flag is only on for multiple task creators
+#if TASKS_SINGLE_CREATOR
+#   undef TASKS_INVERTED
+#   define TASKS_INVERTED 0
 #endif
 
 /*
@@ -184,9 +202,14 @@
 #define STREAM_TYPE double
 #endif
 
-static STREAM_TYPE  a[STREAM_ARRAY_SIZE+OFFSET],
-      b[STREAM_ARRAY_SIZE+OFFSET],
-      c[STREAM_ARRAY_SIZE+OFFSET];
+#if STREAM_USE_HEAP
+static STREAM_TYPE *a, *b, *c;
+#else
+static STREAM_TYPE	
+    a[STREAM_ARRAY_SIZE+OFFSET],
+    b[STREAM_ARRAY_SIZE+OFFSET],
+    c[STREAM_ARRAY_SIZE+OFFSET];
+#endif
 
 static double avgtime[4] = {0}, maxtime[4] = {0},
     mintime[4] = {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX};
@@ -194,42 +217,36 @@ static double avgtime[4] = {0}, maxtime[4] = {0},
 static char *label[4] = {"Copy:      ", "Scale:     ",
     "Add:       ", "Triad:     "};
 
-#if READ_ONLY
-static double bytes[4] = {
-    1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
-    1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
-    2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
-    2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE
-    };
-#else
 static double bytes[4] = {
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE
     };
-#endif
 
 extern double mysecond();
 extern void checkSTREAMresults();
-#ifdef TUNED
-extern void tuned_STREAM_Copy();
-extern void tuned_STREAM_Scale(STREAM_TYPE scalar);
-extern void tuned_STREAM_Add();
-extern void tuned_STREAM_Triad(STREAM_TYPE scalar);
-#endif
+extern void* alloc(size_t size);
 #ifdef _OPENMP
 extern int omp_get_num_threads();
 #endif
+
 int
 main()
     {
     int     quantum, checktick();
     int     BytesPerWord;
-    int     k;
+    int     k, ntask;
     ssize_t   j;
     STREAM_TYPE   scalar;
     double    t, times[4][NTIMES];
+    double t_overall;
+
+#if STREAM_USE_HEAP
+    a = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
+    b = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
+    c = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
+#endif // STREAM_USE_HEAP
 
     /* --- SETUP --- determine precision and check timing --- */
 
@@ -237,8 +254,7 @@ main()
     printf("STREAM version $Revision: 5.10 $\n");
     printf(HLINE);
     BytesPerWord = sizeof(STREAM_TYPE);
-    printf("This system uses %d bytes per array element.\n",
-  BytesPerWord);
+    printf("This system uses %d bytes per array element.\n", BytesPerWord);
 
     printf(HLINE);
 #ifdef N
@@ -259,6 +275,12 @@ main()
     printf("Each kernel will be executed %d times.\n", NTIMES);
     printf(" The *best* time for each kernel (excluding the first iteration)\n"); 
     printf(" will be used to compute the reported bandwidth.\n");
+
+#if TASK_AFFINITY
+    // TODO: do we need that? Or can that be realized with env variables
+    // TODO: use correct syntax to init
+    // kmpc_task_affinity_init(kmp_task_aff_init_thread_type_first, kmp_task_aff_map_type_domain);
+#endif // TASK_AFFINITY
 
 #ifdef _OPENMP
     printf(HLINE);
@@ -281,7 +303,8 @@ main()
 #endif
 
     /* Get initial value for system clock. */
-#pragma omp parallel for
+    printf("Initializing data in parallel ...\n");
+#pragma omp parallel for schedule(static)
     for (j=0; j<STREAM_ARRAY_SIZE; j++) {
       a[j] = 1.0;
       b[j] = 2.0;
@@ -298,6 +321,22 @@ main()
       "less than one microsecond.\n");
   quantum = 1;
     }
+
+    // number of task in which each kernel is divided
+    int n_tasks_overall = -1;
+#pragma omp parallel
+#pragma omp master
+#ifndef TASKS_N_TASKS
+    n_tasks_overall = omp_get_num_threads() * TASKS_MULTIPLICATOR;
+#else
+    n_tasks_overall = TASKS_N_TASKS;
+#endif
+
+    long step = STREAM_ARRAY_SIZE / n_tasks_overall;
+    if(STREAM_ARRAY_SIZE % n_tasks_overall != 0) {
+        step++;
+    }
+    printf("STREAM_ARRAY_SIZE = %ld; n_tasks_overall = %d; step = %ld\n", (long)STREAM_ARRAY_SIZE, n_tasks_overall, (long)step);
 
     t = mysecond();
 #pragma omp parallel for
@@ -319,95 +358,157 @@ main()
     printf(HLINE);
     
     /*  --- MAIN LOOP --- repeat test cases NTIMES times --- */
+    
+    printf("Starting main loop...\n");
 
     scalar = 3.0;
+    t_overall = mysecond();
     double result = 0.0;
     for (k=0; k<NTIMES; k++)
   {
   times[0][k] = mysecond();
-#ifdef TUNED
-        tuned_STREAM_Copy();
-#else
-#if READ_ONLY
-  result = 0.0;
-#if READ_ONLY_REDUCTION
-#pragma omp parallel for reduction(+:result)
-#else
-#pragma omp parallel for lastprivate(result)
-#endif
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      result += a[j];
-#else
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      c[j] = a[j];
-#endif
-#endif
+
+#pragma omp parallel
+#pragma omp taskgroup
+{
+#if TASKS_SINGLE_CREATOR
+    #pragma omp master
+    {
+#else // TASKS_SINGLE_CREATOR
+    #pragma omp for private(ntask) schedule(static)
+#endif // TASKS_SINGLE_CREATOR
+#if TASKS_INVERTED
+    for(ntask = n_tasks_overall-1; ntask >=0 ; ntask--)
+#else // TASKS_INVERTED
+    for(ntask = 0; ntask < n_tasks_overall; ntask++)
+#endif // TASKS_INVERTED
+    {
+        long tmp_idx_start  = ntask * step;
+        long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+#if TASK_AFFINITY
+        kmpc_set_task_affinity(&c[tmp_idx_start]);
+#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+        {
+            long i;
+            for(i = tmp_idx_start; i <= tmp_idx_end; i++){
+                c[i] = a[i];
+            }
+        }
+    }
+#if TASKS_SINGLE_CREATOR
+    }
+#endif // TASKS_SINGLE_CREATOR
+}
   times[0][k] = mysecond() - times[0][k];
   
   times[1][k] = mysecond();
-#ifdef TUNED
-        tuned_STREAM_Scale(scalar);
-#else
-#if READ_ONLY
-  result = 0.0;
-#if READ_ONLY_REDUCTION
-#pragma omp parallel for reduction(+:result)
-#else
-#pragma omp parallel for lastprivate(result)
-#endif
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      result += scalar*c[j];
-#else
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      b[j] = scalar*c[j];
-#endif
-#endif
+#pragma omp parallel
+#pragma omp taskgroup
+{
+#if TASKS_SINGLE_CREATOR
+    #pragma omp master
+    {
+#else // TASKS_SINGLE_CREATOR
+    #pragma omp for private(ntask) schedule(static)
+#endif // TASKS_SINGLE_CREATOR
+#if TASKS_INVERTED
+    for(ntask = n_tasks_overall-1; ntask >=0 ; ntask--)
+#else // TASKS_INVERTED
+    for(ntask = 0; ntask < n_tasks_overall; ntask++)
+#endif // TASKS_INVERTED
+    {
+        long tmp_idx_start  = ntask * step;
+        long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+#if TASK_AFFINITY
+        kmpc_set_task_affinity(&b[tmp_idx_start]);
+#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+        {
+            long i;
+            for(i = tmp_idx_start; i <= tmp_idx_end; i++){
+                b[i] = scalar*c[i];
+            }
+        }
+    }
+#if TASKS_SINGLE_CREATOR
+    }
+#endif // TASKS_SINGLE_CREATOR
+}
   times[1][k] = mysecond() - times[1][k];
   
   times[2][k] = mysecond();
-#ifdef TUNED
-        tuned_STREAM_Add();
-#else
-#if READ_ONLY
-  result = 0.0;
-#if READ_ONLY_REDUCTION
-#pragma omp parallel for reduction(+:result)
-#else
-#pragma omp parallel for lastprivate(result)
-#endif
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      result += a[j]+b[j];
-#else
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      c[j] = a[j]+b[j];
-#endif
-#endif
+#pragma omp parallel
+#pragma omp taskgroup
+{
+#if TASKS_SINGLE_CREATOR
+    #pragma omp master
+    {
+#else // TASKS_SINGLE_CREATOR
+    #pragma omp for private(ntask) schedule(static)
+#endif // TASKS_SINGLE_CREATOR
+#if TASKS_INVERTED
+    for(ntask = n_tasks_overall-1; ntask >=0 ; ntask--)
+#else // TASKS_INVERTED
+    for(ntask = 0; ntask < n_tasks_overall; ntask++)
+#endif // TASKS_INVERTED
+    {
+        long tmp_idx_start  = ntask * step;
+        long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+#if TASK_AFFINITY
+        kmpc_set_task_affinity(&c[tmp_idx_start]);
+#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+        {
+            long i;
+            for(i = tmp_idx_start; i <= tmp_idx_end; i++){
+                c[i] = a[i]+b[i];
+            }
+        }
+    }
+#if TASKS_SINGLE_CREATOR
+    }
+#endif // TASKS_SINGLE_CREATOR
+}
   times[2][k] = mysecond() - times[2][k];
   
   times[3][k] = mysecond();
-#ifdef TUNED
-        tuned_STREAM_Triad(scalar);
-#else
-#if READ_ONLY
-  result = 0.0;
-#if READ_ONLY_REDUCTION
-#pragma omp parallel for reduction(+:result)
-#else
-#pragma omp parallel for lastprivate(result)
-#endif
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      result += b[j]+scalar*c[j];
-#else
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      a[j] = b[j]+scalar*c[j];
-#endif
-#endif
+#pragma omp parallel
+#pragma omp taskgroup
+{
+#if TASKS_SINGLE_CREATOR
+    #pragma omp master
+    {
+#else // TASKS_SINGLE_CREATOR
+    #pragma omp for private(ntask) schedule(static)
+#endif // TASKS_SINGLE_CREATOR
+#if TASKS_INVERTED
+    for(ntask = n_tasks_overall-1; ntask >=0 ; ntask--)
+#else // TASKS_INVERTED
+    for(ntask = 0; ntask < n_tasks_overall; ntask++)
+#endif // TASKS_INVERTED
+    {
+        long tmp_idx_start = ntask * step;
+        long tmp_idx_end = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+#if TASK_AFFINITY
+        kmpc_set_task_affinity(&a[tmp_idx_start]);
+#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+        {
+            long i;
+            for(i = tmp_idx_start; i <= tmp_idx_end; i++){
+                a[i] = b[i]+scalar*c[i];
+            }
+        }
+    }
+#if TASKS_SINGLE_CREATOR
+    }
+#endif // TASKS_SINGLE_CREATOR
+}
   times[3][k] = mysecond() - times[3][k];
   }
+    t_overall = mysecond() - t_overall;
+	printf("Elapsed time for program\t%lf\tsec\n", t_overall);
 
     /*  --- SUMMARY --- */
 
@@ -434,7 +535,6 @@ main()
     printf(HLINE);
 
     /* --- Check Results --- */
-    checkSTREAMresults();
     printf(HLINE);
 
     return 0;
@@ -610,38 +710,9 @@ void checkSTREAMresults ()
 #endif
 }
 
-#ifdef TUNED
-/* stubs for "tuned" versions of the kernels */
-void tuned_STREAM_Copy()
+inline void* alloc(size_t size)
 {
-  ssize_t j;
-#pragma omp parallel for
-        for (j=0; j<STREAM_ARRAY_SIZE; j++)
-            c[j] = a[j];
+    void* p = memalign(4096, size);
+    madvise(p, size, MADV_NOHUGEPAGE);
+    return p;
 }
-
-void tuned_STREAM_Scale(STREAM_TYPE scalar)
-{
-  ssize_t j;
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      b[j] = scalar*c[j];
-}
-
-void tuned_STREAM_Add()
-{
-  ssize_t j;
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      c[j] = a[j]+b[j];
-}
-
-void tuned_STREAM_Triad(STREAM_TYPE scalar)
-{
-  ssize_t j;
-#pragma omp parallel for
-  for (j=0; j<STREAM_ARRAY_SIZE; j++)
-      a[j] = b[j]+scalar*c[j];
-}
-/* end of stubs for the "tuned" versions of the kernels */
-#endif

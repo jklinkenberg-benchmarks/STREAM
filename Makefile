@@ -1,5 +1,6 @@
-FLAGS_OPENMP?=-fopenmp
+STREAM_FILE?=stream_tasks.c
 
+FLAGS_OPENMP?=-fopenmp
 CC ?= gcc
 CFLAGS ?= -O3 ${FLAGS_OPENMP}
 
@@ -15,18 +16,15 @@ COMMON_COMPILE_FLAGS=-DSTREAM_ARRAY_SIZE=${STREAM_ARRAY_SIZE} -DNTIMES=${NTIMES}
 
 all: stream_c.exe
 
-stream_c.exe: stream.c
-	$(CC) $(CFLAGS) ${COMMON_COMPILE_FLAGS} -mcmodel=medium stream.c -o stream_c.exe
+stream_c.exe:
+	$(CC) $(CFLAGS) ${COMMON_COMPILE_FLAGS} -mcmodel=medium ${STREAM_FILE} -o stream_c.exe
 
 clean:
 	rm -f stream_c.exe *.o stream*.icc
 
 # an example of a more complex build line for the Intel icc compiler
-stream.icc: stream.c
-	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} stream.c -o stream.omp.icc
-
-latency.icc: stream_latency.c
-	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} stream_latency.c -o latency.omp.icc
+stream.icc:
+	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} ${STREAM_FILE} -o stream.omp.icc
 
 stream.ncc: 
-	ncc -O3 -fopenmp ${COMMON_COMPILE_FLAGS} stream.c -o stream.omp.ncc
+	ncc -O3 -fopenmp ${COMMON_COMPILE_FLAGS} ${STREAM_FILE} -o stream.omp.ncc
