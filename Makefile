@@ -3,28 +3,23 @@ FLAGS_OPENMP?=-fopenmp
 CC ?= gcc
 CFLAGS ?= -O3 ${FLAGS_OPENMP}
 
-FC ?= gfortran
-FFLAGS ?= -O3 ${FLAGS_OPENMP}
+STREAM_ARRAY_SIZE    ?= 200000000
+NTIMES               ?= 40
+STREAM_USE_HEAP      ?= 0
+TASKS_INVERTED       ?= 0
+TASKS_SINGLE_CREATOR ?= 1
+TASKS_MULTIPLICATOR  ?= 32
+TASK_AFFINITY        ?= 0
 
-STREAM_ARRAY_SIZE?=200000000
-NTIMES?=40
-READ_ONLY?=0
-READ_ONLY_REDUCTION?=1
+COMMON_COMPILE_FLAGS=-DSTREAM_ARRAY_SIZE=${STREAM_ARRAY_SIZE} -DNTIMES=${NTIMES} -DREAD_ONLY=${READ_ONLY} -DREAD_ONLY_REDUCTION=${READ_ONLY_REDUCTION} -DSTREAM_USE_HEAP=${STREAM_USE_HEAP} -DTASKS_INVERTED=${TASKS_INVERTED} -DTASKS_SINGLE_CREATOR=${TASKS_SINGLE_CREATOR} -DTASKS_MULTIPLICATOR=${TASKS_MULTIPLICATOR} -DTASK_AFFINITY=${TASK_AFFINITY}
 
-COMMON_COMPILE_FLAGS=-DSTREAM_ARRAY_SIZE=${STREAM_ARRAY_SIZE} -DNTIMES=${NTIMES} -DREAD_ONLY=${READ_ONLY} -DREAD_ONLY_REDUCTION=${READ_ONLY_REDUCTION}
-
-all: stream_f.exe stream_c.exe
-
-stream_f.exe: stream.f mysecond.o
-	$(CC) $(CFLAGS) -c mysecond.c
-	$(FC) $(FFLAGS) -c stream.f
-	$(FC) $(FFLAGS) stream.o mysecond.o -o stream_f.exe
+all: stream_c.exe
 
 stream_c.exe: stream.c
 	$(CC) $(CFLAGS) ${COMMON_COMPILE_FLAGS} stream.c -o stream_c.exe
 
 clean:
-	rm -f stream_f.exe stream_c.exe *.o stream*.icc
+	rm -f stream_c.exe *.o stream*.icc
 
 # an example of a more complex build line for the Intel icc compiler
 stream.icc: stream.c
