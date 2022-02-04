@@ -124,6 +124,14 @@
 #   define OFFSET 0
 #endif
 
+#ifndef READ_ONLY
+#   define READ_ONLY 0
+#endif
+
+#ifndef READ_ONLY_REDUCTION
+#   define READ_ONLY_REDUCTION 1
+#endif
+
 /*
  *  3) Compile the code with optimization.  Many compilers generate
  *       unreasonably bad code before the optimizer tightens things up.  
@@ -186,12 +194,21 @@ static double avgtime[4] = {0}, maxtime[4] = {0},
 static char *label[4] = {"Copy:      ", "Scale:     ",
     "Add:       ", "Triad:     "};
 
+#if READ_ONLY
+static double bytes[4] = {
+    1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
+    1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
+    2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
+    2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE
+    };
+#else
 static double bytes[4] = {
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE
     };
+#endif
 
 extern double mysecond();
 extern void checkSTREAMresults();
@@ -285,7 +302,7 @@ main()
     t = mysecond();
 #pragma omp parallel for
     for (j = 0; j < STREAM_ARRAY_SIZE; j++)
-    a[j] = 2.0E0 * a[j];
+        a[j] = 2.0E0 * a[j];
     t = 1.0E6 * (mysecond() - t);
 
     printf("Each test below will take on the order"
@@ -304,15 +321,27 @@ main()
     /*  --- MAIN LOOP --- repeat test cases NTIMES times --- */
 
     scalar = 3.0;
+    double result = 0.0;
     for (k=0; k<NTIMES; k++)
   {
   times[0][k] = mysecond();
 #ifdef TUNED
         tuned_STREAM_Copy();
 #else
+#if READ_ONLY
+  result = 0.0;
+#if READ_ONLY_REDUCTION
+#pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for lastprivate(result)
+#endif
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += a[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       c[j] = a[j];
+#endif
 #endif
   times[0][k] = mysecond() - times[0][k];
   
@@ -320,9 +349,20 @@ main()
 #ifdef TUNED
         tuned_STREAM_Scale(scalar);
 #else
+#if READ_ONLY
+  result = 0.0;
+#if READ_ONLY_REDUCTION
+#pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for lastprivate(result)
+#endif
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += scalar*c[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       b[j] = scalar*c[j];
+#endif
 #endif
   times[1][k] = mysecond() - times[1][k];
   
@@ -330,9 +370,20 @@ main()
 #ifdef TUNED
         tuned_STREAM_Add();
 #else
+#if READ_ONLY
+  result = 0.0;
+#if READ_ONLY_REDUCTION
+#pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for lastprivate(result)
+#endif
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += a[j]+b[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       c[j] = a[j]+b[j];
+#endif
 #endif
   times[2][k] = mysecond() - times[2][k];
   
@@ -340,9 +391,20 @@ main()
 #ifdef TUNED
         tuned_STREAM_Triad(scalar);
 #else
+#if READ_ONLY
+  result = 0.0;
+#if READ_ONLY_REDUCTION
+#pragma omp parallel for reduction(+:result)
+#else
+#pragma omp parallel for lastprivate(result)
+#endif
+  for (j=0; j<STREAM_ARRAY_SIZE; j++)
+      result += b[j]+scalar*c[j];
+#else
 #pragma omp parallel for
   for (j=0; j<STREAM_ARRAY_SIZE; j++)
       a[j] = b[j]+scalar*c[j];
+#endif
 #endif
   times[3][k] = mysecond() - times[3][k];
   }
