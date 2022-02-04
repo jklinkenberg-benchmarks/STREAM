@@ -41,6 +41,7 @@
 /*  5. Absolutely no warranty is expressed or implied.                   */
 /*-----------------------------------------------------------------------*/
 # include <stdio.h>
+# include <stdlib.h>
 # include <unistd.h>
 # include <math.h>
 # include <float.h>
@@ -225,7 +226,7 @@ static double bytes[4] = {
 
 extern double mysecond();
 extern void checkSTREAMresults();
-extern inline void* alloc(size_t size);
+extern void* alloc(size_t size);
 #ifdef _OPENMP
 extern int omp_get_num_threads();
 #endif
@@ -241,7 +242,7 @@ main()
     double    t, times[4][NTIMES];
     double t_overall;
 
-#ifndef STREAM_USE_HEAP
+#if STREAM_USE_HEAP
     a = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
     b = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
     c = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
@@ -275,7 +276,7 @@ main()
     printf(" The *best* time for each kernel (excluding the first iteration)\n"); 
     printf(" will be used to compute the reported bandwidth.\n");
 
-#ifdef TASK_AFFINITY
+#if TASK_AFFINITY
     // TODO: do we need that? Or can that be realized with env variables
     // TODO: use correct syntax to init
     // kmpc_task_affinity_init(kmp_task_aff_init_thread_type_first, kmp_task_aff_map_type_domain);
@@ -384,7 +385,7 @@ main()
     {
         long tmp_idx_start  = ntask * step;
         long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
-#ifdef TASK_AFFINITY
+#if TASK_AFFINITY
         kmpc_set_task_affinity(&c[tmp_idx_start]);
 #endif // TASK_AFFINITY
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
@@ -419,7 +420,7 @@ main()
     {
         long tmp_idx_start  = ntask * step;
         long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
-#ifdef TASK_AFFINITY
+#if TASK_AFFINITY
         kmpc_set_task_affinity(&b[tmp_idx_start]);
 #endif // TASK_AFFINITY
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
@@ -454,7 +455,7 @@ main()
     {
         long tmp_idx_start  = ntask * step;
         long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
-#ifdef TASK_AFFINITY
+#if TASK_AFFINITY
         kmpc_set_task_affinity(&c[tmp_idx_start]);
 #endif // TASK_AFFINITY
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
@@ -489,7 +490,7 @@ main()
     {
         long tmp_idx_start = ntask * step;
         long tmp_idx_end = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
-#ifdef TASK_AFFINITY
+#if TASK_AFFINITY
         kmpc_set_task_affinity(&a[tmp_idx_start]);
 #endif // TASK_AFFINITY
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
