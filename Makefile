@@ -28,10 +28,10 @@ clean:
 
 # an example of a more complex build line for the Intel icc compiler
 stream.icc: stream.c
-	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} stream.c -o stream.omp.icc
+	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} stream.c -o stream.omp.icc${EXE_SUFFIX}
 
 latency.icc: stream_latency.c
-	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} stream_latency.c -o latency.omp.icc
+	icc -O3 -xHost -ffreestanding -qopenmp -qopt-streaming-stores=always -qopt-zmm-usage=high -mcmodel=medium ${COMMON_COMPILE_FLAGS} stream_latency.c -o latency.omp.icc${EXE_SUFFIX}
 
 stream.ncc: 
-	ncc -O3 -fopenmp ${COMMON_COMPILE_FLAGS} stream.c -o stream.omp.ncc
+	ncc -O3 -fopenmp ${COMMON_COMPILE_FLAGS} stream.c -o stream.omp.ncc${EXE_SUFFIX}
