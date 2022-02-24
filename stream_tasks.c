@@ -279,7 +279,6 @@ main()
 #if TASK_AFFINITY
     // TODO: do we need that? Or can that be realized with env variables
     // TODO: use correct syntax to init
-    // kmpc_task_affinity_init(kmp_task_aff_init_thread_type_first, kmp_task_aff_map_type_domain);
 #endif // TASK_AFFINITY
 
 #ifdef _OPENMP
@@ -385,10 +384,12 @@ main()
     {
         long tmp_idx_start  = ntask * step;
         long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+        long tmp_len        = tmp_idx_end - tmp_idx_start + 1;
 #if TASK_AFFINITY
-        kmpc_set_task_affinity(&c[tmp_idx_start]);
-#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end) affinity(c[tmp_idx_start:tmp_len])
+#else
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+#endif // TASK_AFFINITY
         {
             long i;
             for(i = tmp_idx_start; i <= tmp_idx_end; i++){
@@ -420,10 +421,12 @@ main()
     {
         long tmp_idx_start  = ntask * step;
         long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+        long tmp_len        = tmp_idx_end - tmp_idx_start + 1;
 #if TASK_AFFINITY
-        kmpc_set_task_affinity(&b[tmp_idx_start]);
-#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end) affinity(b[tmp_idx_start:tmp_len])
+#else
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+#endif // TASK_AFFINITY
         {
             long i;
             for(i = tmp_idx_start; i <= tmp_idx_end; i++){
@@ -455,10 +458,12 @@ main()
     {
         long tmp_idx_start  = ntask * step;
         long tmp_idx_end    = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+        long tmp_len        = tmp_idx_end - tmp_idx_start + 1;
 #if TASK_AFFINITY
-        kmpc_set_task_affinity(&c[tmp_idx_start]);
-#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end) affinity(c[tmp_idx_start:tmp_len])
+#else
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+#endif // TASK_AFFINITY
         {
             long i;
             for(i = tmp_idx_start; i <= tmp_idx_end; i++){
@@ -490,10 +495,12 @@ main()
     {
         long tmp_idx_start = ntask * step;
         long tmp_idx_end = MIN((ntask+1)*step -1, STREAM_ARRAY_SIZE);
+        long tmp_len        = tmp_idx_end - tmp_idx_start + 1;
 #if TASK_AFFINITY
-        kmpc_set_task_affinity(&a[tmp_idx_start]);
-#endif // TASK_AFFINITY
+        #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end) affinity(a[tmp_idx_start:tmp_len])
+#else
         #pragma omp task firstprivate(tmp_idx_start, tmp_idx_end)
+#endif // TASK_AFFINITY
         {
             long i;
             for(i = tmp_idx_start; i <= tmp_idx_end; i++){
