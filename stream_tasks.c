@@ -717,6 +717,9 @@ void checkSTREAMresults ()
 #endif
 }
 
+// explicit declaration
+int madvise(void *addr, size_t length, int advice);
+
 inline void* alloc(size_t size)
 {
     void* p = memalign(4096, size);
