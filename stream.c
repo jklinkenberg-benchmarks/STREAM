@@ -41,11 +41,14 @@
 /*  5. Absolutely no warranty is expressed or implied.                   */
 /*-----------------------------------------------------------------------*/
 # include <stdio.h>
+# include <stdlib.h>
 # include <unistd.h>
 # include <math.h>
 # include <float.h>
 # include <limits.h>
 # include <sys/time.h>
+# include <linux/mman.h>
+# include <malloc.h>
 
 /*-----------------------------------------------------------------------
  * INSTRUCTIONS:
@@ -92,6 +95,10 @@
  */
 #ifndef STREAM_ARRAY_SIZE
 #   define STREAM_ARRAY_SIZE  40000000
+#endif
+
+#ifndef STREAM_USE_HEAP
+#   define STREAM_USE_HEAP 1
 #endif
 
 /*  2) STREAM runs each kernel "NTIMES" times and reports the *best* result
@@ -184,9 +191,14 @@
 #define STREAM_TYPE double
 #endif
 
-static STREAM_TYPE  a[STREAM_ARRAY_SIZE+OFFSET],
-      b[STREAM_ARRAY_SIZE+OFFSET],
-      c[STREAM_ARRAY_SIZE+OFFSET];
+#if STREAM_USE_HEAP
+static STREAM_TYPE *a, *b, *c;
+#else
+static STREAM_TYPE	
+    a[STREAM_ARRAY_SIZE+OFFSET],
+    b[STREAM_ARRAY_SIZE+OFFSET],
+    c[STREAM_ARRAY_SIZE+OFFSET];
+#endif
 
 static double avgtime[4] = {0}, maxtime[4] = {0},
     mintime[4] = {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX};
@@ -212,6 +224,7 @@ static double bytes[4] = {
 
 extern double mysecond();
 extern void checkSTREAMresults();
+extern void* alloc(size_t size);
 #ifdef TUNED
 extern void tuned_STREAM_Copy();
 extern void tuned_STREAM_Scale(STREAM_TYPE scalar);
@@ -230,6 +243,12 @@ main()
     ssize_t   j;
     STREAM_TYPE   scalar;
     double    t, times[4][NTIMES];
+
+#if STREAM_USE_HEAP
+    a = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
+    b = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
+    c = (STREAM_TYPE*) alloc(STREAM_ARRAY_SIZE * sizeof(STREAM_TYPE));
+#endif // STREAM_USE_HEAP
 
     /* --- SETUP --- determine precision and check timing --- */
 
@@ -436,6 +455,12 @@ main()
     /* --- Check Results --- */
     checkSTREAMresults();
     printf(HLINE);
+
+#if STREAM_USE_HEAP
+    free(a);
+    free(b);
+    free(c);
+#endif
 
     return 0;
 }
@@ -645,3 +670,13 @@ void tuned_STREAM_Triad(STREAM_TYPE scalar)
 }
 /* end of stubs for the "tuned" versions of the kernels */
 #endif
+
+// explicit declaration
+int madvise(void *addr, size_t length, int advice);
+
+inline void* alloc(size_t size)
+{
+    void* p = memalign(4096, size);
+    madvise(p, size, MADV_NOHUGEPAGE);
+    return p;
+}
