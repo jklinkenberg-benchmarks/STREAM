@@ -671,7 +671,7 @@ void tuned_STREAM_Triad(STREAM_TYPE scalar)
 /* end of stubs for the "tuned" versions of the kernels */
 #endif
 
-/ explicit declaration
+// explicit declaration
 int madvise(void *addr, size_t length, int advice);
 
 inline void* alloc(size_t size)
